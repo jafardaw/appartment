@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:appartment/core/func/show_snak_bar.dart';
 import 'package:appartment/core/style/color.dart';
+import 'package:appartment/core/widget/app_bar_widget.dart';
 import 'package:appartment/core/widget/custom_button.dart';
 import 'package:appartment/core/widget/custom_field.dart';
 import 'package:appartment/feature/CompleteProfile/presentation/manger/cubit/complet_profile_cubit.dart';
 import 'package:appartment/feature/CompleteProfile/presentation/manger/cubit/complet_profile_state.dart';
+import 'package:appartment/feature/home/presentation/view/home_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -55,13 +57,9 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
     return Scaffold(
       // بما أنك تستخدم BackgroundWrapper عادةً، تأكد من إحاطة هذه الصفحة به في الـ Route
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text(
-          'إكمال البيانات الشخصية',
-          style: TextStyle(fontFamily: 'Cairo'),
-        ),
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
+      appBar: AppareWidget(
+        title: 'إكمال البيانات الشخصية',
+        automaticallyImplyLeading: true,
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -162,6 +160,12 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                               context,
                               state.message,
                               color: Colors.green,
+                            );
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => HomeView(),
+                              ),
                             );
                             // Navigator.pushReplacementNamed(context, '/home');
                           } else if (state is CompleteProfileFailure) {
