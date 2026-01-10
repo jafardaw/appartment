@@ -1,6 +1,8 @@
 import 'package:appartment/core/theme/manger/theme_cubit.dart';
 import 'package:appartment/core/utils/assetimage.dart';
 import 'package:appartment/core/widget/background_viwe.dart';
+import 'package:appartment/feature/wallet/presentation/manger/cubit/wallet_cubit.dart';
+import 'package:appartment/feature/wallet/presentation/view/charge_wallet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -64,14 +66,35 @@ class SettingsView extends StatelessWidget {
                   const SizedBox(height: 16),
 
                   // قسم اللغة (بما أنك تستخدم Easy Localization)
-                  _buildSettingsCard(
-                    context,
-                    title: 'لغة التطبيق',
-                    subtitle: 'العربية (الإمارات)',
-                    icon: Icons.language_outlined,
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      // هنا يمكنك إضافة منطق تغيير اللغة
+                  BlocBuilder<WalletCubit, WalletState>(
+                    builder: (context, state) {
+                      String currentBalance = "جاري التحميل...";
+                      if (state is WalletLoaded) {
+                        currentBalance = "${state.balance} ل.س";
+                      }
+
+                      if (state is WalletFailure) {
+                        currentBalance = "خطأ في التحميل";
+                      }
+
+                      return _buildSettingsCard(
+                        context,
+                        title: 'محفظتي',
+                        subtitle: 'الرصيد الحالي: $currentBalance',
+                        icon: Icons.account_balance_wallet_outlined,
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BlocProvider.value(
+                                value: context.read<WalletCubit>(),
+                                child: ChargeWalletView(amount: currentBalance),
+                              ),
+                            ),
+                          );
+                        },
+                      );
                     },
                   ),
 

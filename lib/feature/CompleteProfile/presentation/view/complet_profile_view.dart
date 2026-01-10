@@ -161,7 +161,7 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                               state.message,
                               color: Colors.green,
                             );
-                            Navigator.push(
+                            Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(
                                 builder: (context) => HomeView(),

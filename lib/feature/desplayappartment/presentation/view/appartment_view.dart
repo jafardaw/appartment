@@ -1,13 +1,21 @@
 import 'package:appartment/core/style/color.dart';
+import 'package:appartment/core/style/styles.dart';
+import 'package:appartment/core/utils/api_service.dart';
 import 'package:appartment/core/widget/app_bar_widget.dart';
 import 'package:appartment/core/widget/loading_view.dart';
 import 'package:appartment/feature/desplayappartment/data/model/apartment_model.dart';
+import 'package:appartment/feature/desplayappartment/owner/presentation/manger/cubit/add_apartment_cubit.dart';
+import 'package:appartment/feature/desplayappartment/owner/presentation/manger/cubit/update_appartment_cubit.dart';
+import 'package:appartment/feature/desplayappartment/owner/presentation/view/update_apartment_view.dart';
 import 'package:appartment/feature/desplayappartment/presentation/manger/cubit/apartments_cubit.dart';
 import 'package:appartment/feature/desplayappartment/presentation/manger/cubit/apartments_state.dart';
 import 'package:appartment/feature/desplayappartment/presentation/manger/cubit/favorit_cubit.dart';
+import 'package:appartment/feature/desplayappartment/owner/presentation/view/add_apartment_view.dart';
 import 'package:appartment/feature/desplayappartment/presentation/view/apartment_details_view.dart';
+import 'package:appartment/feature/desplayappartment/repo/apartment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppartmentView extends StatefulWidget {
   const AppartmentView({super.key});
@@ -20,12 +28,23 @@ class _AppartmentViewState extends State<AppartmentView> {
   // كونتورلرز للتحكم في حقول البحث
   final TextEditingController _cityController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
-
+  bool isOwner = false;
   @override
   void initState() {
     // جلب البيانات عند تشغيل الصفحة لأول مرة
     context.read<ApartmentsCubit>().getApartments();
     super.initState();
+    _checkRole(); // جلب الـ role عند التشغيل
+  }
+
+  Future<void> _checkRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    final role = prefs.getString('role');
+    if (role == 'owner') {
+      setState(() {
+        isOwner = true;
+      });
+    }
   }
 
   // ميثود لتشغيل الفلترة عند أي تغيير في النصوص
@@ -39,6 +58,29 @@ class _AppartmentViewState extends State<AppartmentView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: isOwner
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                // الانتقال لصفحة إضافة شقة جديدة
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BlocProvider(
+                      create: (context) =>
+                          AddApartmentCubit(HomeRepo(ApiService())),
+                      child: const AddApartmentView(),
+                    ),
+                  ),
+                );
+              },
+              backgroundColor: Palette.primary, // استخدم لونك المعتمد
+              label: const Text('إضافة شقة', style: Styles.textStyle16),
+              icon: const Icon(
+                Icons.add_home_work_rounded,
+                color: Palette.backgroundColor,
+              ),
+            )
+          : null,
       appBar: AppareWidget(
         title: 'العقارات المتاحة',
         automaticallyImplyLeading: true,
@@ -114,7 +156,7 @@ class _AppartmentViewState extends State<AppartmentView> {
                     itemCount: state.apartments.length,
                     itemBuilder: (context, index) {
                       final apartment = state.apartments[index];
-                      return _buildApartmentCard(apartment);
+                      return buildApartmentCard(apartment);
                     },
                   );
                 }
@@ -157,7 +199,8 @@ class _AppartmentViewState extends State<AppartmentView> {
 
   /// *****  a4c95b42-ddbc-4fcd-8ae0-3391ad4c57df  ******
   // بطاقة عرض الشقة مع إضافة زر المفضلة
-  Widget _buildApartmentCard(ApartmentModel apartment) {
+  // بطاقة عرض الشقة المعدلة
+  Widget buildApartmentCard(ApartmentModel apartment) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -175,10 +218,8 @@ class _AppartmentViewState extends State<AppartmentView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // استخدام Stack لوضع زر المفضلة فوق الصورة
             Stack(
               children: [
-                // الصورة (أو الأيقونة الافتراضية)
                 Container(
                   height: 140,
                   width: double.infinity,
@@ -194,22 +235,18 @@ class _AppartmentViewState extends State<AppartmentView> {
                     color: Colors.blueGrey,
                   ),
                 ),
-                // زر المفضلة في الزاوية
                 Positioned(
                   top: 10,
-                  left: 10, // نضعه على اليسار لأن التطبيق باللغة العربية
+                  left: 10,
                   child: BlocBuilder<FavoritesCubit, List<ApartmentModel>>(
                     builder: (context, favorites) {
-                      // التحقق إذا كانت الشقة موجودة في قائمة المفضلة
                       final isFav = context.read<FavoritesCubit>().isFavorite(
                         apartment,
                       );
                       return GestureDetector(
-                        onTap: () {
-                          context.read<FavoritesCubit>().toggleFavorite(
-                            apartment,
-                          );
-                        },
+                        onTap: () => context
+                            .read<FavoritesCubit>()
+                            .toggleFavorite(apartment),
                         child: CircleAvatar(
                           radius: 18,
                           backgroundColor: Colors.white.withOpacity(0.9),
@@ -232,25 +269,58 @@ class _AppartmentViewState extends State<AppartmentView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // العنوان مع أزرار التحكم للمالك
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        apartment.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          fontFamily: 'Cairo',
+                      Expanded(
+                        child: Text(
+                          apartment.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            fontFamily: 'Cairo',
+                          ),
                         ),
                       ),
-                      Text(
-                        "${apartment.pricePerDay} ل.س",
-                        style: const TextStyle(
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                      if (isOwner)
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => BlocProvider(
+                                      create: (context) => UpdateApartmentCubit(
+                                        HomeRepo(ApiService()),
+                                      ),
+                                      child: UpdateApartmentView(
+                                        apartment: apartment,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.edit_note_rounded,
+                                color: Colors.blue,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          "${apartment.pricePerDay} ل.س",
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -274,17 +344,31 @@ class _AppartmentViewState extends State<AppartmentView> {
                   ),
                   const Divider(height: 20),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildMiniInfo(
-                        Icons.king_bed_outlined,
-                        "${apartment.rooms} غرف",
+                      Row(
+                        children: [
+                          _buildMiniInfo(
+                            Icons.king_bed_outlined,
+                            "${apartment.rooms} غرف",
+                          ),
+                          const SizedBox(width: 20),
+                          _buildMiniInfo(
+                            Icons.bathtub_outlined,
+                            "${apartment.bathrooms} حمام",
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 20),
-                      _buildMiniInfo(
-                        Icons.bathtub_outlined,
-                        "${apartment.bathrooms} حمام",
-                      ),
+                      // إذا كان مالكاً، نعرض السعر هنا بالأسفل لأن المكان العلوي محجوز للأزرار
+                      if (isOwner)
+                        Text(
+                          "${apartment.pricePerDay} ل.س",
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                     ],
                   ),
                 ],

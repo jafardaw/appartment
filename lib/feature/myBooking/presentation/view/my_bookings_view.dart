@@ -1,8 +1,6 @@
-// my_bookings_view.dart
 import 'package:appartment/core/func/show_snak_bar.dart';
 import 'package:appartment/core/utils/api_service.dart';
 import 'package:appartment/core/widget/app_bar_widget.dart';
-import 'package:appartment/core/widget/background_viwe.dart';
 import 'package:appartment/core/widget/loading_view.dart';
 import 'package:appartment/feature/myBooking/data/model/my_booking_model.dart';
 import 'package:appartment/feature/myBooking/presentation/manger/cubit/my_bookings_cubit.dart';
@@ -30,7 +28,7 @@ class MyBookingsView extends StatelessWidget {
         body: BlocBuilder<MyBookingsCubit, MyBookingsState>(
           builder: (context, state) {
             if (state is MyBookingsLoading) {
-              return Center(child: const LoadingViewWidget());
+              return const Center(child: LoadingViewWidget());
             }
 
             if (state is MyBookingsFailure) {
@@ -44,6 +42,14 @@ class MyBookingsView extends StatelessWidget {
 
             if (state is MyBookingsSuccess) {
               final bookings = state.responseModel.bookings;
+              if (bookings.isEmpty) {
+                return const Center(
+                  child: Text(
+                    "لا يوجد حجوزات حالياً",
+                    style: TextStyle(fontFamily: 'Cairo'),
+                  ),
+                );
+              }
               return ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: bookings.length,
@@ -60,14 +66,13 @@ class MyBookingsView extends StatelessWidget {
 
   Widget _buildBookingItem(BuildContext context, BookingModel booking) {
     return Card(
-      elevation: 6, // قلّلت الإرتفاع ليصبح أكثر أناقة
+      elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // عنوان الحجز + الحالة
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -88,8 +93,6 @@ class MyBookingsView extends StatelessWidget {
               style: const TextStyle(fontFamily: 'Cairo', color: Colors.grey),
             ),
             const Divider(),
-
-            // التاريخ والسعر
             Row(
               children: [
                 const Icon(Icons.date_range, size: 18, color: Colors.blue),
@@ -108,41 +111,48 @@ class MyBookingsView extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 12),
-
-            // ✨ أزرار تعديل وحذف
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _actionButton(
-                  context,
-                  icon: Icons.edit,
-                  label: 'تعديل',
-                  color: Colors.blue,
-                  onTap: () {
-                    // هنا ضع وظيفة التعديل
-                    print("تعديل ${booking.apartment.title}");
-                  },
-                ),
-                const SizedBox(width: 10),
-                _actionButton(
-                  context,
-                  icon: Icons.delete,
-                  label: 'حذف',
-                  color: Colors.red,
-                  onTap: () {
-                    // هنا ضع وظيفة الحذف
-                    print("حذف ${booking.apartment.title}");
-                  },
-                ),
-                _actionButton(
-                  context,
-                  icon: Icons.star_rate_rounded,
-                  label: 'تقييم',
-                  color: Colors.amber.shade700,
-                  onTap: () => _showRatingDialog(context, booking.id),
-                ),
+                // زر التعديل يظهر فقط إذا كان الحجز قيد الانتظار
+                if (booking.status == 'pending')
+                  _actionButton(
+                    context,
+                    icon: Icons.edit,
+                    label: 'تعديل',
+                    color: Colors.blue,
+                    onTap: () {
+                      DateTime startDate = DateTime.parse(booking.startDate);
+                      if (startDate.isBefore(DateTime.now())) {
+                        showCustomSnackBar(
+                          context,
+                          "لا يمكن تعديل حجز بدأ بالفعل",
+                          color: Colors.orange,
+                        );
+                      } else {
+                        _editBookingDates(context, booking);
+                      }
+                    },
+                  ),
+                const SizedBox(width: 8),
+                // زر الحذف
+                if (booking.status == 'pending')
+                  _actionButton(
+                    context,
+                    icon: Icons.delete,
+                    label: 'حذف',
+                    color: Colors.red,
+                    onTap: () => _confirmCancelBooking(context, booking),
+                  ),
+                if (booking.status != 'pending')
+                  _actionButton(
+                    context,
+                    icon: Icons.star_rate_rounded,
+                    label: 'تقييم',
+                    color: Colors.amber.shade700,
+                    onTap: () => _showRatingDialog(context, booking.id),
+                  ),
               ],
             ),
           ],
@@ -150,6 +160,98 @@ class MyBookingsView extends StatelessWidget {
       ),
     );
   }
+
+  // --- وظائف التعديل والحذف ---
+
+  Future<void> _editBookingDates(
+    BuildContext context,
+    BookingModel booking,
+  ) async {
+    // 1. تحديد تاريخ اليوم كحد أدنى
+    DateTime now = DateTime.now();
+    DateTime firstAvailableDate = DateTime(now.year, now.month, now.day);
+
+    // 2. تحويل تواريخ الحجز من نصوص إلى DateTime
+    DateTime bookingStart = DateTime.parse(booking.startDate);
+    DateTime bookingEnd = DateTime.parse(booking.endDate);
+
+    // 3. معالجة التواريخ لتجنب الـ Assertion Error
+    // إذا كان تاريخ الحجز قديم (قبل اليوم)، نجعل الافتراضي يبدأ من اليوم
+    DateTime initialStart = bookingStart.isBefore(firstAvailableDate)
+        ? firstAvailableDate
+        : bookingStart;
+
+    // التأكد من أن تاريخ النهاية بعد تاريخ البداية الجديد
+    DateTime initialEnd = bookingEnd.isBefore(initialStart)
+        ? initialStart.add(const Duration(days: 1))
+        : bookingEnd;
+
+    DateTimeRange? pickedRange = await showDateRangePicker(
+      context: context,
+      locale: const Locale('ar'),
+      firstDate: firstAvailableDate, // لا يمكن اختيار تاريخ قبل اليوم
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: DateTimeRange(start: initialStart, end: initialEnd),
+    );
+
+    if (pickedRange != null) {
+      final start = pickedRange.start.toString().split(' ')[0];
+      final end = pickedRange.end.toString().split(' ')[0];
+
+      await context.read<MyBookingsCubit>().updateBooking(
+        booking.id,
+        start,
+        end,
+      );
+      if (context.mounted)
+        showCustomSnackBar(context, "تم إرسال طلب التعديل بنجاح");
+    }
+  }
+
+  void _confirmCancelBooking(BuildContext context, BookingModel booking) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text(
+            "إلغاء الحجز",
+            style: TextStyle(fontFamily: 'Cairo'),
+          ),
+          content: Text(
+            "هل أنت متأكد من رغبتك في إلغاء حجزك في ${booking.apartment.title}؟",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                "تراجع",
+                style: TextStyle(color: Colors.grey, fontFamily: 'Cairo'),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                await context.read<MyBookingsCubit>().deleteBooking(booking.id);
+                if (context.mounted)
+                  showCustomSnackBar(context, "تم إلغاء الحجز بنجاح");
+              },
+              child: const Text(
+                "تأكيد الحذف",
+                style: TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- الـ Widgets المساعدة ---
 
   Widget _actionButton(
     BuildContext context, {
@@ -161,53 +263,44 @@ class MyBookingsView extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [color.withOpacity(0.7), color],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.4),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          color: color,
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: Colors.white),
-            const SizedBox(width: 6),
+            Icon(icon, size: 16, color: Colors.white),
+            const SizedBox(width: 4),
             Text(
               label,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
+                fontFamily: 'Cairo',
               ),
             ),
           ],
         ),
-      ).animate().scale(duration: 200.ms, curve: Curves.easeInOut),
+      ).animate().scale(duration: 150.ms),
     );
   }
 
   Widget _statusWidget(String status) {
+    bool isPending = status == 'pending';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: status == 'pending'
+        color: isPending
             ? Colors.orange.withOpacity(0.1)
             : Colors.green.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
-        status == 'pending' ? 'قيد الانتظار' : 'مقبول',
+        isPending ? 'قيد الانتظار' : 'مقبول',
         style: TextStyle(
-          color: status == 'pending' ? Colors.orange : Colors.green,
+          color: isPending ? Colors.orange : Colors.green,
           fontSize: 12,
           fontFamily: 'Cairo',
         ),
@@ -216,8 +309,7 @@ class MyBookingsView extends StatelessWidget {
   }
 
   void _showRatingDialog(BuildContext context, int bookingId) {
-    double selectedRating = 3.0; // القيمة الافتراضية
-
+    double selectedRating = 3.0;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -257,24 +349,19 @@ class MyBookingsView extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             onPressed: () async {
               try {
                 await context.read<MyBookingsCubit>().addReview(
                   bookingId,
                   selectedRating,
                 );
-                Navigator.pop(context); // إغلاق الديالوج
+                Navigator.pop(context);
                 showCustomSnackBar(context, "تم التقييم بنجاح، شكراً لك!");
               } catch (e) {
                 showCustomSnackBar(
                   context,
-                  "لا يمكن التقييم الا بعد  انتهاء مدة  الحجز",
+                  "لا يمكن التقييم إلا بعد انتهاء مدة الحجز",
                 );
               }
             },

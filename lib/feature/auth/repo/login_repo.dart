@@ -27,6 +27,7 @@ class LoginRepo {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', responseModel.token);
+      await prefs.setString('role', responseModel.user.role);
 
       return responseModel;
     } on DioException catch (e) {
@@ -58,7 +59,7 @@ class LoginRepo {
 
       final data = response.data;
 
-      return data['message'];
+      return "تم  التسجيل بنجاح الرجاء الانتظار  الموافقة من  الادمن ";
     } on DioException catch (e) {
       if (kDebugMode) {
         print('DioException caught in RegisterRepo: ${e.message}');

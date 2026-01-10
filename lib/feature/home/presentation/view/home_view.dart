@@ -1,16 +1,14 @@
 import 'package:appartment/core/style/color.dart';
 import 'package:appartment/core/theme/manger/theme_cubit.dart';
-import 'package:appartment/core/utils/api_service.dart';
-import 'package:appartment/feature/desplayappartment/presentation/manger/cubit/apartments_cubit.dart';
 import 'package:appartment/feature/desplayappartment/presentation/view/appartment_view.dart';
 import 'package:appartment/feature/desplayappartment/presentation/view/favorit_view.dart';
-import 'package:appartment/feature/desplayappartment/repo/apartment.dart';
 import 'package:appartment/feature/home/presentation/view/SettingsView.dart';
 import 'package:appartment/feature/myBooking/presentation/view/my_bookings_view.dart';
-
+import 'package:appartment/feature/ownerBo/presentation/view/OwnerBookingsView.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -21,84 +19,91 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   int _selectedIndex = 0;
-  late final List<Widget> _pages;
+  bool isOwner = false; // القيمة الافتراضية
+  bool isLoading = true; // حالة تحميل البيانات من الشيرد
+  late List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
+    _checkRole();
+  }
 
-    _pages = [
-      AppartmentView(),
-      FavoritesView(),
-      MyBookingsView(),
-      SettingsView(),
-      // Center(
-      //   child: IconButton(
-      //     icon: Icon(
-      //       context.read<ThemeCubit>().state == ThemeMode.light
-      //           ? Icons.dark_mode
-      //           : Icons.light_mode,
-      //     ),
-      //     onPressed: () {
-      //       context.read<ThemeCubit>().toggleTheme();
-      //     },
-      //   ),
-      // ),
-    ];
+  Future<void> _checkRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? role = prefs.getString('role');
+
+    setState(() {
+      isOwner = role == 'owner';
+      // ننشئ الصفحات بعد التأكد من الـ role
+      _pages = [
+        const AppartmentView(),
+        const FavoritesView(),
+        isOwner ? const OwnerBookingsView() : const MyBookingsView(),
+        const SettingsView(),
+      ];
+      isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (context) => ApartmentsCubit(HomeRepo(ApiService())),
-        ),
-      ],
-      child: Scaffold(
-        body: _pages[_selectedIndex],
+    // إذا لم ينتهِ التحميل من الشيرد بريفرنس، نعرض مؤشر تحميل
+    if (isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-        bottomNavigationBar: CurvedNavigationBar(
-          index: _selectedIndex,
-          height: 60.0,
-          color: Palette.primary,
-          buttonBackgroundColor: Colors.white,
-          backgroundColor: Colors.white,
-          animationCurve: Curves.easeInOut,
-          animationDuration: const Duration(milliseconds: 300),
+    return BlocBuilder<ThemeCubit, ThemeMode>(
+      builder: (context, themeMode) {
+        final isDark = themeMode == ThemeMode.dark;
 
-          items: <Widget>[
-            Icon(
-              Icons.home,
-              size: 30,
-              color: _selectedIndex == 0 ? Palette.primary : Colors.white,
-            ),
-            Icon(
-              Icons.favorite,
-              size: 30,
-              color: _selectedIndex == 1 ? Palette.primary : Colors.white,
-            ),
-            Icon(
-              Icons.lock_clock_outlined,
-              size: 30,
-              color: _selectedIndex == 2 ? Palette.primary : Colors.white,
-            ),
-            Icon(
-              Icons.settings,
-              size: 30,
-              color: _selectedIndex == 3 ? Palette.primary : Colors.white,
-            ),
-          ],
+        return Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: _pages[_selectedIndex],
+          bottomNavigationBar: CurvedNavigationBar(
+            index: _selectedIndex,
+            height: 60,
+            color: isDark
+                ? const Color(0xFF1E1E1E)
+                : const Color.fromARGB(255, 164, 134, 124),
+            buttonBackgroundColor: isDark
+                ? const Color(0xFF2A2A2A)
+                : Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            animationCurve: Curves.easeInOut,
+            animationDuration: const Duration(milliseconds: 300),
+            items: [
+              _navIcon(context, Icons.home, 0, isDark),
+              _navIcon(context, Icons.favorite, 1, isDark),
+              // أيقونة متغيرة: حقيبة عمل للمالك، أو تقويم للمستأجر
+              _navIcon(
+                context,
+                isOwner
+                    ? Icons.business_center_rounded
+                    : Icons.calendar_month_rounded,
+                2,
+                isDark,
+              ),
+              _navIcon(context, Icons.settings, 3, isDark),
+            ],
+            onTap: (index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+          ),
+        );
+      },
+    );
+  }
 
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-
-          letIndexChange: (index) => true,
-        ),
-      ),
+  Widget _navIcon(BuildContext context, IconData icon, int index, bool isDark) {
+    return Icon(
+      icon,
+      size: 30,
+      color: _selectedIndex == index
+          ? Palette.primary
+          : (isDark ? Colors.grey[400] : Colors.white),
     );
   }
 }

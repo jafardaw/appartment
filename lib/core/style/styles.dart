@@ -38,7 +38,7 @@ abstract class Styles {
   static const textStyle16 = TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.bold,
-    color: Palette.text,
+    color: Palette.backgroundColor,
   );
   static const textStyle17 = TextStyle(
     fontSize: 17,

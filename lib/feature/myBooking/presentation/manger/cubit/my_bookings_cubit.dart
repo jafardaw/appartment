@@ -26,4 +26,24 @@ class MyBookingsCubit extends Cubit<MyBookingsState> {
       rethrow;
     }
   }
+
+  Future<void> updateBooking(int id, String start, String end) async {
+    emit(MyBookingsLoading());
+    try {
+      await _bookingRepo.updateBooking(id, start, end);
+      await fetchBookings(); // إعادة جلب البيانات لتحديث القائمة
+    } catch (e) {
+      emit(MyBookingsFailure(e.toString()));
+    }
+  }
+
+  Future<void> deleteBooking(int id) async {
+    emit(MyBookingsLoading());
+    try {
+      await _bookingRepo.cancelBooking(id);
+      await fetchBookings();
+    } catch (e) {
+      emit(MyBookingsFailure(e.toString()));
+    }
+  }
 }
